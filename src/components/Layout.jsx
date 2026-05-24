@@ -7,6 +7,7 @@ const baseNavItems = [
   { path: '/dashboard', label: 'ภาพรวม', icon: '📊' },
   { path: '/projects', label: 'Projects', icon: '📁' },
   { path: '/disbursements', label: 'เบิกจ่าย', icon: '💸' },
+  { path: '/capital', label: 'เงินทุน', icon: '💰' },
 ];
 
 export default function Layout({ children }) {

@@ -149,6 +149,27 @@ export default function Dashboard() {
             />
           </div>
 
+          {/* Capital */}
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">เงินทุน</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <StatCard
+              label="เงินทุนรวม"
+              value={formatCurrency(summary['เงินทุนรวม'] || 0)}
+              icon="💰"
+              color="text-emerald-600"
+              linkTo="/capital"
+              sub="ยอดที่หุ้นส่วนสมทบทั้งหมด"
+            />
+            <StatCard
+              label="เงินทุนคงเหลือ"
+              value={formatCurrency(summary['เงินทุนคงเหลือ'] || 0)}
+              icon="🏦"
+              color={parseFloat(summary['เงินทุนคงเหลือ'] || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}
+              linkTo="/capital"
+              sub="หลังหักค่าใช้จ่ายบริษัท"
+            />
+          </div>
+
           {/* Customer Payment */}
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">ลูกค้าค้างชำระ</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">

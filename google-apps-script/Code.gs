@@ -4,7 +4,7 @@
 // ============================================================
 
 // ===== CONFIG: แก้ไขค่าเหล่านี้ให้ตรงกับ Google Sheets ของคุณ =====
-const SPREADSHEET_ID = '1PX8H1yv25yy1WyIkSPNVqycM7YqDxXDdrwAA_nN4XnI'; // ID ของ Google Sheets
+const SPREADSHEET_ID = '1CFWnUvzrjRCavPBvirfOmOek5sxyvn1kzzhQrWaTWtE'; // ID ของ Google Sheets
 const DRIVE_FOLDER_ID = '1VdpfZNw4phGMJvQx9Yx6h65Ikgen9EWn'; // ID ของ Google Drive folder สำหรับเก็บไฟล์
 
 // Sheet names
@@ -96,6 +96,12 @@ function handleRequest(e) {
 
       // Logs
       case 'getLogs':           result = getLogs(); break;
+
+      // Capital
+      case 'getCapital':        result = getCapital(); break;
+      case 'addCapital':        result = addCapital(data); break;
+      case 'updateCapital':     result = updateCapital(data); break;
+      case 'deleteCapital':     result = deleteCapital(data.id, data._user); break;
 
       default:
         result = { success: false, error: 'Unknown action: ' + action };
@@ -418,11 +424,19 @@ function getSummary() {
   const totalDisbursed = disbursements.reduce((sum, d) => sum + (parseFloat(d['จำนวนเงิน']) || 0), 0);
   const pendingDisbursements = disbursements.filter(d => d['สถานะ'] !== 'จ่ายแล้ว').length;
 
-  // เงินกองกลาง = กำไร (เฉพาะ Paid projects) − ยอดที่จ่ายออกจริงแล้ว
-  const totalActuallyPaid = disbursements
-    .filter(d => d['สถานะ'] === 'จ่ายแล้ว')
+  // เงินกองกลาง = กำไร − (ใช้ส่วนตัว + เงินเดือน) ที่จ่ายแล้ว
+  const paidPersonalAndSalary = disbursements
+    .filter(function(d) { return d['สถานะ'] === 'จ่ายแล้ว' && (d['ประเภท'] === 'ใช้ส่วนตัว' || d['ประเภท'] === 'เงินเดือน'); })
     .reduce(function(sum, d) { return sum + (parseFloat(d['จำนวนเงิน']) || 0); }, 0);
-  const เงินกองกลาง = totalProfit - totalActuallyPaid;
+  const เงินกองกลาง = totalProfit - paidPersonalAndSalary;
+
+  // เงินทุน = Capital sheet − ค่าใช้จ่ายบริษัท (ใช้ในบริษัท) ที่จ่ายแล้ว
+  const capitalItems = sheetToObjects(ensureCapitalSheet());
+  const เงินทุนรวม = capitalItems.reduce(function(sum, c) { return sum + (parseFloat(c['Amount']) || 0); }, 0);
+  const companyExpenses = disbursements
+    .filter(function(d) { return d['สถานะ'] === 'จ่ายแล้ว' && d['ประเภท'] === 'ใช้ในบริษัท'; })
+    .reduce(function(sum, d) { return sum + (parseFloat(d['จำนวนเงิน']) || 0); }, 0);
+  const เงินทุนคงเหลือ = เงินทุนรวม - companyExpenses;
 
   // คำนวณส่วนแบ่งกำไรแบบ per-project จาก PartnerShares JSON
   // นับเฉพาะ Project ที่ลูกค้าจ่ายแล้ว (Paid) เท่านั้น
@@ -475,6 +489,8 @@ function getSummary() {
       กำไร: totalProfit,
       เงินกองกลาง: เงินกองกลาง,
       รอพิจรณาเพื่อจ่าย: pendingPayment,
+      เงินทุนรวม: เงินทุนรวม,
+      เงินทุนคงเหลือ: เงินทุนคงเหลือ,
       รายได้รอรับ: pendingRevenue,
       อื่นๆที่รอจ่าย: pendingDisbursements,
       สรุปเบิกจ่ายตาม: totalDisbursed,
@@ -686,4 +702,62 @@ function getLogs() {
     return obj;
   });
   return { success: true, data: logs };
+}
+
+// ===== CAPITAL (เงินทุน) =====
+const SHEET_CAPITAL = 'Capital';
+
+function ensureCapitalSheet() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_CAPITAL);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_CAPITAL);
+    sheet.getRange(1, 1, 1, 5).setValues([['CapitalID', 'Date', 'Contributor', 'Amount', 'Note']]);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f3f4f6');
+  }
+  return sheet;
+}
+
+function getCapital() {
+  const sheet = ensureCapitalSheet();
+  return { success: true, data: sheetToObjects(sheet) };
+}
+
+function addCapital(data) {
+  const sheet = ensureCapitalSheet();
+  const id = generateId();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(function(h) {
+    if (h === 'CapitalID') return id;
+    return data[h] !== undefined ? data[h] : '';
+  });
+  sheet.appendRow(row);
+  addLog(data._user, 'เพิ่ม', 'Capital', data['Contributor'] + ' ' + data['Amount']);
+  return { success: true, id };
+}
+
+function updateCapital(data) {
+  const sheet = ensureCapitalSheet();
+  const items = sheetToObjects(sheet);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const item = items.find(function(i) { return i.CapitalID === data.CapitalID; });
+  if (!item) return { success: false, error: 'Capital not found' };
+  const row = headers.map(function(h) {
+    return data[h] !== undefined ? data[h] : (item[h] || '');
+  });
+  sheet.getRange(item._rowIndex, 1, 1, headers.length).setValues([row]);
+  addLog(data._user, 'แก้ไข', 'Capital', data['Contributor'] + ' ' + data['Amount']);
+  return { success: true };
+}
+
+function deleteCapital(id, user) {
+  const sheet = ensureCapitalSheet();
+  const items = sheetToObjects(sheet);
+  const item = items.find(function(i) { return i.CapitalID === id; });
+  if (!item) return { success: false, error: 'Capital not found' };
+  const name = (item['Contributor'] || '') + ' ' + (item['Amount'] || '');
+  sheet.deleteRow(item._rowIndex);
+  addLog(user, 'ลบ', 'Capital', name);
+  return { success: true };
 }

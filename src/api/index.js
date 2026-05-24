@@ -103,3 +103,9 @@ export const deletePartner = (id) => call('deletePartner', { id });
 
 // ===== LOGS =====
 export const getLogs = () => call('getLogs');
+
+// ===== CAPITAL =====
+export const getCapital = () => call('getCapital');
+export const addCapital = (data) => call('addCapital', data);
+export const updateCapital = (data) => call('updateCapital', data);
+export const deleteCapital = (id) => call('deleteCapital', { id });

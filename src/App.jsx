@@ -12,6 +12,7 @@ import Users from './pages/Users';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import Logs from './pages/Logs';
+import Capital from './pages/Capital';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
       <Route path="/logs" element={<ProtectedRoute adminOnly><Logs /></ProtectedRoute>} />
+      <Route path="/capital" element={<ProtectedRoute><Capital /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

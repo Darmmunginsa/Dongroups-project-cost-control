@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
 const STATUS_OPT = ['จ่ายแล้ว', 'รอพิจรณา', 'ยังไม่ได้จ่าย'];
-const TYPE_OPT   = ['ใช้ส่วนตัว', 'ใช้ในบริษัท'];
+const TYPE_OPT   = ['ใช้ส่วนตัว', 'ใช้ในบริษัท', 'เงินเดือน'];
 
 const EMPTY = { 'รายการที่เบิก': '', 'วันที่': today(), 'จำนวนเงิน': '', 'คนเบิก': '', 'สถานะ': 'จ่ายแล้ว', 'ประเภท': 'ใช้ส่วนตัว', 'เอกสาร': null };
 
@@ -87,6 +87,7 @@ export default function Disbursements() {
   const totalAmount = filtered.reduce((sum, i) => sum + (parseFloat(i['จำนวนเงิน']) || 0), 0);
   const personal = filtered.filter(i => i['ประเภท'] === 'ใช้ส่วนตัว').reduce((sum, i) => sum + (parseFloat(i['จำนวนเงิน']) || 0), 0);
   const company = filtered.filter(i => i['ประเภท'] === 'ใช้ในบริษัท').reduce((sum, i) => sum + (parseFloat(i['จำนวนเงิน']) || 0), 0);
+  const salary = filtered.filter(i => i['ประเภท'] === 'เงินเดือน').reduce((sum, i) => sum + (parseFloat(i['จำนวนเงิน']) || 0), 0);
 
   return (
     <div className="p-6">
@@ -102,7 +103,7 @@ export default function Disbursements() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
         <div className="card p-4">
           <p className="text-xs text-gray-400">รวมทั้งหมด</p>
           <p className="text-xl font-bold text-gray-900">{formatCurrency(totalAmount)}</p>
@@ -114,6 +115,10 @@ export default function Disbursements() {
         <div className="card p-4">
           <p className="text-xs text-gray-400">ใช้ในบริษัท</p>
           <p className="text-xl font-bold text-blue-600">{formatCurrency(company)}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs text-gray-400">เงินเดือน</p>
+          <p className="text-xl font-bold text-orange-600">{formatCurrency(salary)}</p>
         </div>
       </div>
 
@@ -162,7 +167,9 @@ export default function Disbursements() {
                   <td className="px-4 py-3 text-center text-gray-600">{item['คนเบิก'] || '-'}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      item['ประเภท'] === 'ใช้ส่วนตัว' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                      item['ประเภท'] === 'ใช้ส่วนตัว' ? 'bg-purple-100 text-purple-700' :
+                      item['ประเภท'] === 'เงินเดือน' ? 'bg-orange-100 text-orange-700' :
+                      'bg-blue-100 text-blue-700'
                     }`}>{item['ประเภท']}</span>
                   </td>
                   <td className="px-4 py-3 text-center">
