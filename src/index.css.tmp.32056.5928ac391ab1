@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Theme CSS Variables (default: blue) ===== */
+:root {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-light: #eff6ff;
+  --color-primary-soft: #dbeafe;
+  --color-primary-text: #1e40af;
+}
+
+* {
+  font-family: 'Sarabun', sans-serif;
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100;
+  }
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm;
+  }
+  .btn-danger {
+    @apply bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors font-medium text-sm;
+  }
+  .badge-done {
+    @apply bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-medium;
+  }
+  .badge-process {
+    @apply text-xs px-2 py-0.5 rounded-full font-medium;
+    background-color: var(--color-primary-soft);
+    color: var(--color-primary-text);
+  }
+  .badge-paid {
+    @apply bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-medium;
+  }
+  .badge-pending {
+    @apply bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-medium;
+  }
+}
+
+/* ===== Theme-aware utility classes ===== */
+.btn-primary {
+  background-color: var(--color-primary);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: background-color 0.15s;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.btn-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input-field {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.input-field:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+/* Toast — center on mobile, top-right on desktop */
+.toast-container > div {
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
+}
+@media (min-width: 640px) {
+  .toast-container > div {
+    left: auto !important;
+    right: 16px !important;
+    transform: none !important;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

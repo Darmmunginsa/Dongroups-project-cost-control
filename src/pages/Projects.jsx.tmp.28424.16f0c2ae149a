@@ -1,0 +1,344 @@
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { getProjects, addProject, updateProject, deleteProject, getPartners } from '../api';
+import { useAuth } from '../context/AuthContext';
+import { formatCurrency, formatDate, formatDateInput, today } from '../utils/formatters';
+import Modal from '../components/Modal';
+import toast from 'react-hot-toast';
+
+const STATUS_OPTIONS = ['On Process', 'Done'];
+const PAYMENT_STATUS = ['Pending', 'Paid'];
+
+const EMPTY_FORM = {
+  ProjectName: '', ProjectNo: '', MainVendor: '', SubVendor: '',
+  QTNumber: '', Date: today(), NetPrice: '', Status: 'On Process',
+  Logs: '', PaymentDueDate: '', PaymentStatus: 'Pending', PartnerShares: '',
+};
+
+export default function Projects() {
+  const [projects, setProjects] = useState([]);
+  const [partners, setPartners] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [modal, setModal] = useState({ open: false, mode: 'add', data: null });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [pRes, partRes] = await Promise.all([getProjects(), getPartners()]);
+      setProjects(pRes.data || []);
+      setPartners(partRes.data || []);
+    } catch (err) {
+      toast.error('โหลดข้อมูลไม่สำเร็จ: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openAdd = () => {
+    setForm(EMPTY_FORM);
+    setModal({ open: true, mode: 'add', data: null });
+  };
+
+  const openEdit = (project) => {
+    setForm({
+      ...project,
+      Date: formatDateInput(project.Date),
+      PaymentDueDate: formatDateInput(project.PaymentDueDate),
+      PartnerShares: project.PartnerShares || '',
+    });
+    setModal({ open: true, mode: 'edit', data: project });
+  };
+
+  // Parse PartnerShares JSON string → object, e.g. '{"ดาม":40,"กฤต":60}' → {ดาม:40,กฤต:60}
+  const parseShares = (sharesStr) => {
+    try { return sharesStr ? JSON.parse(sharesStr) : {}; } catch { return {}; }
+  };
+
+  const setShare = (partnerName, value) => {
+    const current = parseShares(form.PartnerShares);
+    current[partnerName] = value === '' ? '' : parseFloat(value) || 0;
+    setForm({ ...form, PartnerShares: JSON.stringify(current) });
+  };
+
+  const totalShares = () => {
+    const obj = parseShares(form.PartnerShares);
+    return Object.values(obj).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  };
+
+  const handleSave = async () => {
+    if (!form.ProjectName) { toast.error('กรุณากรอกชื่อ Project'); return; }
+    setSaving(true);
+    try {
+      if (modal.mode === 'add') {
+        await addProject(form);
+        toast.success('เพิ่ม Project สำเร็จ');
+      } else {
+        await updateProject({ ...modal.data, ...form });
+        toast.success('แก้ไข Project สำเร็จ');
+      }
+      setModal({ open: false });
+      load();
+    } catch (err) {
+      toast.error('เกิดข้อผิดพลาด: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (project) => {
+    try {
+      await deleteProject(project.ProjectID);
+      toast.success('ลบ Project สำเร็จ');
+      setDeleteConfirm(null);
+      load();
+    } catch (err) {
+      toast.error('ลบไม่สำเร็จ: ' + err.message);
+    }
+  };
+
+  const filtered = projects.filter(p => {
+    const matchSearch = !search || p.ProjectName?.toLowerCase().includes(search.toLowerCase()) ||
+      p.MainVendor?.toLowerCase().includes(search.toLowerCase()) ||
+      p.QTNumber?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = filterStatus === 'all' || p.Status === filterStatus;
+    return matchSearch && matchStatus;
+  });
+
+  const grouped = {
+    'On Process': filtered.filter(p => p.Status === 'On Process'),
+    'Done': filtered.filter(p => p.Status === 'Done'),
+  };
+
+  return (
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Projects</h1>
+          <p className="text-sm text-gray-500">{projects.length} โครงการทั้งหมด</p>
+        </div>
+        <button onClick={openAdd} className="btn-primary flex items-center gap-2">
+          <span>+</span> เพิ่ม Project
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-3 mb-5">
+        <input
+          type="text"
+          placeholder="ค้นหา Project, Vendor, QT..."
+          className="input-field max-w-xs"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        <select className="input-field w-40" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+          <option value="all">ทั้งหมด</option>
+          <option value="On Process">On Process</option>
+          <option value="Done">Done</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <svg className="animate-spin w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(grouped).map(([status, items]) => (
+            items.length > 0 && (
+              <div key={status}>
+                <h2 className="text-sm font-semibold text-gray-500 mb-2 flex items-center gap-2">
+                  <span className={status === 'Done' ? 'badge-done' : 'badge-process'}>{status}</span>
+                  <span className="text-gray-400">({items.length})</span>
+                </h2>
+                <div className="card overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">No.</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">ชื่อ Project</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Vendor หลัก</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">QT Number</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Net Price</th>
+                        <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">สัดส่วน</th>
+                        <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">สถานะการชำระ</th>
+                        <th className="px-4 py-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {items.map(p => (
+                        <tr key={p.ProjectID} className="hover:bg-gray-50 group">
+                          <td className="px-4 py-3 text-gray-400 font-mono text-xs">{p.ProjectNo}</td>
+                          <td className="px-4 py-3">
+                            <Link to={`/projects/${p.ProjectID}`} className="font-medium text-blue-600 hover:underline">
+                              {p.ProjectName}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{p.MainVendor || '-'}</td>
+                          <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.QTNumber || '-'}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-800">{formatCurrency(p.NetPrice)}</td>
+                          <td className="px-4 py-3 text-center">
+                            {p.PartnerShares
+                              ? (() => {
+                                  try {
+                                    const obj = JSON.parse(p.PartnerShares);
+                                    return (
+                                      <span className="text-xs text-gray-600">
+                                        {Object.entries(obj).map(([k,v]) => `${k} ${v}%`).join(' / ')}
+                                      </span>
+                                    );
+                                  } catch { return <span className="text-gray-300 text-xs">-</span>; }
+                                })()
+                              : <span className="text-gray-300 text-xs">-</span>}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={p.PaymentStatus === 'Paid' ? 'badge-paid' : 'badge-pending'}>
+                              {p.PaymentStatus || 'Pending'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => openEdit(p)} className="text-gray-400 hover:text-blue-600 p-1">✏️</button>
+                              <button onClick={() => setDeleteConfirm(p)} className="text-gray-400 hover:text-red-500 p-1">🗑️</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          ))}
+
+          {filtered.length === 0 && (
+            <div className="text-center py-16 text-gray-400">
+              <p className="text-4xl mb-3">📭</p>
+              <p>ไม่พบ Project</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      <Modal
+        isOpen={modal.open}
+        onClose={() => setModal({ open: false })}
+        title={modal.mode === 'add' ? 'เพิ่ม Project ใหม่' : 'แก้ไข Project'}
+        size="lg"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อ Project *</label>
+            <input className="input-field" value={form.ProjectName} onChange={e => setForm({...form, ProjectName: e.target.value})} placeholder="ชื่อโครงการ" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Project No.</label>
+            <input className="input-field" type="number" value={form.ProjectNo} onChange={e => setForm({...form, ProjectNo: e.target.value})} placeholder="1" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">QT Number</label>
+            <input className="input-field" value={form.QTNumber} onChange={e => setForm({...form, QTNumber: e.target.value})} placeholder="QT6706-001" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Vendor หลัก (Main Vendor)</label>
+            <input className="input-field" value={form.MainVendor} onChange={e => setForm({...form, MainVendor: e.target.value})} placeholder="ชื่อบริษัท" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sub Vendor</label>
+            <input className="input-field" value={form.SubVendor} onChange={e => setForm({...form, SubVendor: e.target.value})} placeholder="ชื่อบริษัท (ถ้ามี)" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Net Price (บาท)</label>
+            <input className="input-field" type="number" value={form.NetPrice} onChange={e => setForm({...form, NetPrice: e.target.value})} placeholder="0" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">วันที่เริ่ม</label>
+            <input className="input-field" type="date" value={form.Date} onChange={e => setForm({...form, Date: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">วันที่ลูกค้าต้องการจ่าย</label>
+            <input className="input-field" type="date" value={form.PaymentDueDate} onChange={e => setForm({...form, PaymentDueDate: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">สถานะ Project</label>
+            <select className="input-field" value={form.Status} onChange={e => setForm({...form, Status: e.target.value})}>
+              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">สถานะการชำระ</label>
+            <select className="input-field" value={form.PaymentStatus} onChange={e => setForm({...form, PaymentStatus: e.target.value})}>
+              {PAYMENT_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">สัดส่วนกำไร (%)</label>
+            {partners.length === 0 ? (
+              <p className="text-xs text-gray-400">ยังไม่มีหุ้นส่วน กรุณาตั้งค่าหุ้นส่วนก่อน</p>
+            ) : (
+              <div className="space-y-2">
+                {partners.map(p => {
+                  const shares = parseShares(form.PartnerShares);
+                  return (
+                    <div key={p.PartnerID} className="flex items-center gap-3">
+                      <span className="text-sm text-gray-700 w-24 flex-shrink-0">{p.Name}</span>
+                      <div className="relative flex-1">
+                        <input
+                          className="input-field pr-8"
+                          type="number" min="0" max="100" step="1"
+                          placeholder="0"
+                          value={shares[p.Name] ?? ''}
+                          onChange={e => setShare(p.Name, e.target.value)}
+                        />
+                        <span className="absolute right-3 top-2 text-gray-400 text-sm">%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {(() => {
+                  const total = totalShares();
+                  return (
+                    <p className={`text-xs mt-1 ${Math.abs(total - 100) < 0.01 ? 'text-green-600' : total > 100 ? 'text-red-500' : 'text-amber-600'}`}>
+                      รวม: {total}% {Math.abs(total - 100) < 0.01 ? '✅' : total > 100 ? '⚠️ เกิน 100%' : `⚠️ ขาดอีก ${100 - total}%`}
+                    </p>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">หมายเหตุ / Logs</label>
+            <textarea className="input-field" rows={3} value={form.Logs} onChange={e => setForm({...form, Logs: e.target.value})} placeholder="บันทึกเพิ่มเติม..." />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-5">
+          <button onClick={() => setModal({ open: false })} className="btn-secondary">ยกเลิก</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary">
+            {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Delete Confirm */}
+      <Modal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="ยืนยันการลบ" size="sm">
+        <p className="text-gray-600 text-sm">คุณต้องการลบ <span className="font-semibold text-gray-900">"{deleteConfirm?.ProjectName}"</span> ใช่ไหม?</p>
+        <p className="text-xs text-red-500 mt-1">การลบจะลบข้อมูลค่าใช้จ่ายและเอกสารที่เกี่ยวข้องทั้งหมดด้วย</p>
+        <div className="flex justify-end gap-3 mt-5">
+          <button onClick={() => setDeleteConfirm(null)} className="btn-secondary">ยกเลิก</button>
+          <button onClick={() => handleDelete(deleteConfirm)} className="btn-danger">ลบ</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}

@@ -1,0 +1,374 @@
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import {
+  getProject, updateProject,
+  getCosts, addCost, updateCost, deleteCost,
+  getDocuments, addDocument, updateDocument, deleteDocument,
+} from '../api';
+import { formatCurrency, formatDate, formatDateInput, today } from '../utils/formatters';
+import Modal from '../components/Modal';
+import FileUpload from '../components/FileUpload';
+import toast from 'react-hot-toast';
+
+// ===== Cost Form =====
+const EMPTY_COST = { CostName: '', Amount: '', Date: today(), 'Paid Status': 'Paid', Attachment: '', Slip: '' };
+const EMPTY_DOC  = { DocName: '', FileAttachment: '', DocDate: today() };
+
+function parseFileField(val) {
+  if (!val) return null;
+  if (typeof val === 'object') return val;
+  // legacy path string
+  if (val.startsWith('http')) return { fileUrl: val, fileName: val.split('/').pop() };
+  return { fileUrl: null, fileName: val };
+}
+
+export default function ProjectDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
+  const [project, setProject] = useState(null);
+  const [costs, setCosts] = useState([]);
+  const [docs, setDocs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Cost modal
+  const [costModal, setCostModal] = useState({ open: false, mode: 'add', data: null });
+  const [costForm, setCostForm] = useState(EMPTY_COST);
+  const [savingCost, setSavingCost] = useState(false);
+
+  // Doc modal
+  const [docModal, setDocModal] = useState({ open: false, mode: 'add', data: null });
+  const [docForm, setDocForm] = useState(EMPTY_DOC);
+  const [savingDoc, setSavingDoc] = useState(false);
+
+  useEffect(() => { loadAll(); }, [id]);
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [pRes, cRes, dRes] = await Promise.all([
+        getProject(id), getCosts(id), getDocuments(id)
+      ]);
+      setProject(pRes.data);
+      setCosts(cRes.data || []);
+      setDocs(dRes.data || []);
+    } catch (err) {
+      toast.error('โหลดข้อมูลไม่สำเร็จ: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ===== COST =====
+  const openAddCost = () => { setCostForm({...EMPTY_COST, ProjectID: id}); setCostModal({ open: true, mode: 'add' }); };
+  const openEditCost = (c) => {
+    setCostForm({ ...c, Date: formatDateInput(c.Date), Attachment: parseFileField(c.Attachment), Slip: parseFileField(c.Slip) });
+    setCostModal({ open: true, mode: 'edit', data: c });
+  };
+
+  const saveCost = async () => {
+    if (!costForm.CostName) { toast.error('กรุณากรอกชื่อค่าใช้จ่าย'); return; }
+    setSavingCost(true);
+    try {
+      const payload = {
+        ...costForm,
+        ProjectID: id,
+        Attachment: costForm.Attachment?.fileUrl || costForm.Attachment || '',
+        Slip: costForm.Slip?.fileUrl || costForm.Slip || '',
+      };
+      if (costModal.mode === 'add') { await addCost(payload); toast.success('เพิ่มค่าใช้จ่ายสำเร็จ'); }
+      else { await updateCost({ ...costModal.data, ...payload }); toast.success('แก้ไขสำเร็จ'); }
+      setCostModal({ open: false });
+      const res = await getCosts(id);
+      setCosts(res.data || []);
+    } catch (err) { toast.error(err.message); }
+    finally { setSavingCost(false); }
+  };
+
+  const handleDeleteCost = async (cost) => {
+    if (!confirm(`ลบ "${cost.CostName}" ใช่ไหม?`)) return;
+    try {
+      await deleteCost(cost.CostID);
+      toast.success('ลบสำเร็จ');
+      const res = await getCosts(id);
+      setCosts(res.data || []);
+    } catch (err) { toast.error(err.message); }
+  };
+
+  // ===== DOCUMENT =====
+  const openAddDoc = () => { setDocForm({...EMPTY_DOC, ProjectID: id}); setDocModal({ open: true, mode: 'add' }); };
+  const openEditDoc = (d) => {
+    setDocForm({ ...d, DocDate: formatDateInput(d.DocDate), FileAttachment: parseFileField(d.FileAttachment) });
+    setDocModal({ open: true, mode: 'edit', data: d });
+  };
+
+  const saveDoc = async () => {
+    if (!docForm.DocName) { toast.error('กรุณากรอกชื่อเอกสาร'); return; }
+    setSavingDoc(true);
+    try {
+      const payload = {
+        ...docForm,
+        ProjectID: id,
+        FileAttachment: docForm.FileAttachment?.fileUrl || docForm.FileAttachment || '',
+      };
+      if (docModal.mode === 'add') { await addDocument(payload); toast.success('เพิ่มเอกสารสำเร็จ'); }
+      else { await updateDocument({ ...docModal.data, ...payload }); toast.success('แก้ไขสำเร็จ'); }
+      setDocModal({ open: false });
+      const res = await getDocuments(id);
+      setDocs(res.data || []);
+    } catch (err) { toast.error(err.message); }
+    finally { setSavingDoc(false); }
+  };
+
+  const handleDeleteDoc = async (doc) => {
+    if (!confirm(`ลบ "${doc.DocName}" ใช่ไหม?`)) return;
+    try {
+      await deleteDocument(doc.DocID);
+      toast.success('ลบสำเร็จ');
+      const res = await getDocuments(id);
+      setDocs(res.data || []);
+    } catch (err) { toast.error(err.message); }
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen">
+      <svg className="animate-spin w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+    </div>
+  );
+
+  if (!project) return (
+    <div className="flex flex-col items-center justify-center h-screen text-gray-400">
+      <p className="text-4xl mb-3">😕</p>
+      <p>ไม่พบ Project</p>
+      <Link to="/projects" className="text-blue-500 text-sm mt-2 hover:underline">กลับไปหน้า Projects</Link>
+    </div>
+  );
+
+  const totalCost = costs.reduce((sum, c) => sum + (parseFloat(c.Amount) || 0), 0);
+  const profit = (parseFloat(project.NetPrice) || 0) - totalCost;
+
+  return (
+    <div className="p-6 max-w-5xl">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-gray-400 mb-5">
+        <Link to="/projects" className="hover:text-blue-500">Projects</Link>
+        <span>/</span>
+        <span className="text-gray-700 font-medium truncate">{project.ProjectName}</span>
+      </div>
+
+      {/* Project Header */}
+      <div className="card p-5 mb-5">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={project.Status === 'Done' ? 'badge-done' : 'badge-process'}>{project.Status}</span>
+              <span className={project.PaymentStatus === 'Paid' ? 'badge-paid' : 'badge-pending'}>{project.PaymentStatus}</span>
+              {project.ProjectNo && <span className="text-xs text-gray-400 font-mono">#{project.ProjectNo}</span>}
+            </div>
+            <h1 className="text-xl font-bold text-gray-900 mb-3">{project.ProjectName}</h1>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+              <div><span className="text-gray-400">QT Number:</span> <span className="font-medium">{project.QTNumber || '-'}</span></div>
+              <div><span className="text-gray-400">Vendor หลัก:</span> <span className="font-medium">{project.MainVendor || '-'}</span></div>
+              <div><span className="text-gray-400">Sub Vendor:</span> <span className="font-medium">{project.SubVendor || '-'}</span></div>
+              <div><span className="text-gray-400">วันที่ลูกค้าจ่าย:</span> <span className="font-medium">{formatDate(project.PaymentDueDate)}</span></div>
+              {project.Logs && (
+                <div className="col-span-2"><span className="text-gray-400">หมายเหตุ:</span> <span>{project.Logs}</span></div>
+              )}
+            </div>
+          </div>
+          {/* Financial summary */}
+          <div className="sm:text-right sm:ml-8 sm:min-w-[180px]">
+            <div className="bg-blue-50 rounded-xl p-4 space-y-2">
+              <div>
+                <p className="text-xs text-gray-400">Net Price</p>
+                <p className="text-lg font-bold text-blue-700">{formatCurrency(project.NetPrice)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">รายจ่ายรวม</p>
+                <p className="text-base font-semibold text-red-500">{formatCurrency(totalCost)}</p>
+              </div>
+              <div className="border-t border-blue-100 pt-2">
+                <p className="text-xs text-gray-400">คงเหลือ</p>
+                <p className={`text-lg font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(profit)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Documents */}
+      <div className="card p-5 mb-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900">📄 เอกสารสำคัญ <span className="text-gray-400 text-sm font-normal">({docs.length})</span></h2>
+          <button onClick={openAddDoc} className="btn-primary text-xs px-3 py-1.5">+ เพิ่มเอกสาร</button>
+        </div>
+        {docs.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center py-4">ยังไม่มีเอกสาร</p>
+        ) : (
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[400px]">
+            <thead><tr className="border-b border-gray-100">
+              <th className="text-left py-2 text-xs text-gray-400 font-medium">ชื่อเอกสาร</th>
+              <th className="text-left py-2 text-xs text-gray-400 font-medium">วันที่</th>
+              <th className="text-left py-2 text-xs text-gray-400 font-medium">ไฟล์</th>
+              <th className="py-2"></th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {docs.map(d => (
+                <tr key={d.DocID} className="group hover:bg-gray-50">
+                  <td className="py-2.5 font-medium text-gray-800">{d.DocName}</td>
+                  <td className="py-2.5 text-gray-500">{formatDate(d.DocDate)}</td>
+                  <td className="py-2.5">
+                    {d.FileAttachment ? (
+                      <a href={typeof d.FileAttachment === 'object' ? d.FileAttachment.fileUrl : d.FileAttachment}
+                        target="_blank" rel="noopener noreferrer"
+                        className="text-blue-500 hover:underline text-xs flex items-center gap-1">
+                        📄 ดูไฟล์
+                      </a>
+                    ) : <span className="text-gray-300 text-xs">ไม่มีไฟล์</span>}
+                  </td>
+                  <td className="py-2.5">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                      <button onClick={() => openEditDoc(d)} className="text-gray-400 hover:text-blue-500 p-1">✏️</button>
+                      {isAdmin && <button onClick={() => handleDeleteDoc(d)} className="text-gray-400 hover:text-red-500 p-1">🗑️</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        )}
+      </div>
+
+      {/* Costs */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900">💰 ค่าใช้จ่าย <span className="text-gray-400 text-sm font-normal">({costs.length} รายการ)</span></h2>
+          <button onClick={openAddCost} className="btn-primary text-xs px-3 py-1.5">+ เพิ่มค่าใช้จ่าย</button>
+        </div>
+        {costs.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center py-4">ยังไม่มีค่าใช้จ่าย</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-gray-100">
+              <th className="text-left py-2 text-xs text-gray-400 font-medium">รายการ</th>
+              <th className="text-right py-2 text-xs text-gray-400 font-medium">จำนวน</th>
+              <th className="text-left py-2 text-xs text-gray-400 font-medium">วันที่</th>
+              <th className="text-center py-2 text-xs text-gray-400 font-medium">สถานะ</th>
+              <th className="text-center py-2 text-xs text-gray-400 font-medium">หลักฐาน</th>
+              <th className="py-2"></th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {costs.map(c => (
+                <tr key={c.CostID} className="group hover:bg-gray-50">
+                  <td className="py-2.5 font-medium text-gray-800">{c.CostName}</td>
+                  <td className="py-2.5 text-right font-semibold text-gray-900">{formatCurrency(c.Amount)}</td>
+                  <td className="py-2.5 text-gray-500">{formatDate(c.Date)}</td>
+                  <td className="py-2.5 text-center">
+                    <span className={c['Paid Status'] === 'Paid' ? 'badge-paid' : 'badge-pending'}>
+                      {c['Paid Status'] || 'Unpaid'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 text-center">
+                    <div className="flex justify-center gap-2">
+                      {c.Attachment ? (
+                        <a href={typeof c.Attachment === 'object' ? c.Attachment.fileUrl : c.Attachment}
+                          target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">🧾 ซื้อ</a>
+                      ) : null}
+                      {c.Slip ? (
+                        <a href={typeof c.Slip === 'object' ? c.Slip.fileUrl : c.Slip}
+                          target="_blank" rel="noopener noreferrer" className="text-xs text-green-500 hover:underline">💳 จ่าย</a>
+                      ) : null}
+                      {!c.Attachment && !c.Slip && <span className="text-gray-300 text-xs">-</span>}
+                    </div>
+                  </td>
+                  <td className="py-2.5">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                      <button onClick={() => openEditCost(c)} className="text-gray-400 hover:text-blue-500 p-1">✏️</button>
+                      {isAdmin && <button onClick={() => handleDeleteCost(c)} className="text-gray-400 hover:text-red-500 p-1">🗑️</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-gray-200">
+                <td className="py-3 font-semibold text-gray-700">รวมทั้งหมด</td>
+                <td className="py-3 text-right font-bold text-red-600">{formatCurrency(totalCost)}</td>
+                <td colSpan={4}></td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+
+      {/* Cost Modal */}
+      <Modal isOpen={costModal.open} onClose={() => setCostModal({ open: false })} title={costModal.mode === 'add' ? 'เพิ่มค่าใช้จ่าย' : 'แก้ไขค่าใช้จ่าย'} size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อค่าใช้จ่าย *</label>
+            <input className="input-field" value={costForm.CostName} onChange={e => setCostForm({...costForm, CostName: e.target.value})} placeholder="[ค่าน้ำมัน] สำหรับ PM..." />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">จำนวนเงิน (บาท)</label>
+              <input className="input-field" type="number" value={costForm.Amount} onChange={e => setCostForm({...costForm, Amount: e.target.value})} placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">วันที่</label>
+              <input className="input-field" type="date" value={costForm.Date} onChange={e => setCostForm({...costForm, Date: e.target.value})} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">สถานะการจ่าย</label>
+            <div className="flex gap-3">
+              {['Paid', 'Unpaid'].map(s => (
+                <button key={s} type="button"
+                  onClick={() => setCostForm({...costForm, 'Paid Status': s})}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    costForm['Paid Status'] === s
+                      ? s === 'Paid' ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                  {s === 'Paid' ? '✓ Paid' : '⏳ Unpaid'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <FileUpload label="หลักฐานการซื้อ (ใบเสร็จ)" value={costForm.Attachment} onChange={v => setCostForm({...costForm, Attachment: v})} subfolder="receipts" accept="image/*,.pdf" canDelete={isAdmin} />
+          <FileUpload label="หลักฐานการจ่าย (Slip)" value={costForm.Slip} onChange={v => setCostForm({...costForm, Slip: v})} subfolder="slips" accept="image/*,.pdf" canDelete={isAdmin} />
+        </div>
+        <div className="flex justify-end gap-3 mt-5">
+          <button onClick={() => setCostModal({ open: false })} className="btn-secondary">ยกเลิก</button>
+          <button onClick={saveCost} disabled={savingCost} className="btn-primary">{savingCost ? 'กำลังบันทึก...' : 'บันทึก'}</button>
+        </div>
+      </Modal>
+
+      {/* Doc Modal */}
+      <Modal isOpen={docModal.open} onClose={() => setDocModal({ open: false })} title={docModal.mode === 'add' ? 'เพิ่มเอกสาร' : 'แก้ไขเอกสาร'} size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อเอกสาร *</label>
+            <input className="input-field" value={docForm.DocName} onChange={e => setDocForm({...docForm, DocName: e.target.value})} placeholder="PO, Service Agreement, ใบวางบิล..." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">วันที่เอกสาร</label>
+            <input className="input-field" type="date" value={docForm.DocDate} onChange={e => setDocForm({...docForm, DocDate: e.target.value})} />
+          </div>
+          <FileUpload label="แนบไฟล์เอกสาร" value={docForm.FileAttachment} onChange={v => setDocForm({...docForm, FileAttachment: v})} subfolder="documents" accept=".pdf,image/*" canDelete={isAdmin} />
+        </div>
+        <div className="flex justify-end gap-3 mt-5">
+          <button onClick={() => setDocModal({ open: false })} className="btn-secondary">ยกเลิก</button>
+          <button onClick={saveDoc} disabled={savingDoc} className="btn-primary">{savingDoc ? 'กำลังบันทึก...' : 'บันทึก'}</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}

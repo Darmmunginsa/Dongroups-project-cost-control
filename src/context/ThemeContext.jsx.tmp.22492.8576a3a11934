@@ -1,0 +1,55 @@
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+
+export const THEMES = {
+  blue:   { label: 'Blue',   emoji: '🔵', primary: '#2563eb', hover: '#1d4ed8', light: '#eff6ff', soft: '#dbeafe', text: '#1e40af' },
+  indigo: { label: 'Indigo', emoji: '🟣', primary: '#4f46e5', hover: '#4338ca', light: '#eef2ff', soft: '#e0e7ff', text: '#3730a3' },
+  purple: { label: 'Purple', emoji: '💜', primary: '#9333ea', hover: '#7e22ce', light: '#faf5ff', soft: '#f3e8ff', text: '#6b21a8' },
+  green:  { label: 'Green',  emoji: '🟢', primary: '#16a34a', hover: '#15803d', light: '#f0fdf4', soft: '#dcfce7', text: '#14532d' },
+  teal:   { label: 'Teal',   emoji: '🩵', primary: '#0d9488', hover: '#0f766e', light: '#f0fdfa', soft: '#ccfbf1', text: '#134e4a' },
+  orange: { label: 'Orange', emoji: '🟠', primary: '#ea580c', hover: '#c2410c', light: '#fff7ed', soft: '#ffedd5', text: '#9a3412' },
+  rose:   { label: 'Rose',   emoji: '🌹', primary: '#e11d48', hover: '#be123c', light: '#fff1f2', soft: '#ffe4e6', text: '#9f1239' },
+};
+
+const ThemeContext = createContext();
+
+function applyTheme(themeName) {
+  const t = THEMES[themeName] || THEMES.blue;
+  const root = document.documentElement;
+  root.style.setProperty('--color-primary', t.primary);
+  root.style.setProperty('--color-primary-hover', t.hover);
+  root.style.setProperty('--color-primary-light', t.light);
+  root.style.setProperty('--color-primary-soft', t.soft);
+  root.style.setProperty('--color-primary-text', t.text);
+}
+
+export function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState('blue');
+
+  // Load theme for current user from localStorage (keyed by username)
+  const initTheme = useCallback((username) => {
+    const key = username ? `theme_${username}` : 'theme_guest';
+    const saved = localStorage.getItem(key) || 'blue';
+    setTheme(saved);
+    applyTheme(saved);
+  }, []);
+
+  const changeTheme = useCallback((themeName, username) => {
+    setTheme(themeName);
+    applyTheme(themeName);
+    const key = username ? `theme_${username}` : 'theme_guest';
+    localStorage.setItem(key, themeName);
+  }, []);
+
+  // Apply on first mount (before user loads)
+  useEffect(() => {
+    applyTheme('blue');
+  }, []);
+
+  return (
+    <ThemeContext.Provider value={{ theme, changeTheme, initTheme, themes: THEMES }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export const useTheme = () => useContext(ThemeContext);

@@ -1,0 +1,92 @@
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+
+const baseNavItems = [
+  { path: '/dashboard', label: 'ภาพรวม', icon: '📊' },
+  { path: '/projects', label: 'Projects', icon: '📁' },
+  { path: '/disbursements', label: 'เบิกจ่าย', icon: '💸' },
+];
+
+export default function Layout({ children }) {
+  const { user, logout } = useAuth();
+  const { theme } = useTheme();
+  const isAdmin = user?.role === 'admin';
+  const navItems = isAdmin
+    ? [...baseNavItems, { path: '/settings', label: 'ตั้งค่า', icon: '⚙️' }]
+    : baseNavItems;
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <aside className="w-56 bg-white border-r border-gray-200 flex flex-col fixed h-full z-10">
+        {/* Logo */}
+        <div className="p-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: 'var(--color-primary)' }}>P</div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800 leading-tight">Project Cost</p>
+              <p className="text-xs text-gray-400 leading-tight">Control</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-1">
+          {navItems.map(item => {
+            const active = location.pathname.startsWith(item.path);
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                style={active
+                  ? { backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary-text)' }
+                  : {}}
+              >
+                <span>{item.icon}</span>
+                <span className={active ? '' : 'text-gray-600'}>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User */}
+        <div className="p-3 border-t border-gray-100">
+          <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+            <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xs font-bold">
+              {user?.displayName?.[0] || user?.username?.[0] || 'U'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-800 truncate">{user?.displayName || user?.username}</p>
+              <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
+            </div>
+          </div>
+          {user?.role === 'admin' && (
+            <Link to="/users" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 transition-colors ${location.pathname === '/users' ? 'bg-gray-50 text-blue-700' : ''}`}>
+              <span>👥</span> จัดการผู้ใช้
+            </Link>
+          )}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors mt-1"
+          >
+            <span>🚪</span> ออกจากระบบ
+          </button>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <main className="flex-1 ml-56 min-h-screen">
+        {children}
+      </main>
+    </div>
+  );
+}

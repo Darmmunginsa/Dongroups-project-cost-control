@@ -52,4 +52,22 @@ function AppRoutes() {
 const isMobile = () => window.innerWidth < 640;
 
 export default function App() {
-  retur
+  return (
+    <AuthProvider>
+      <ThemeProvider>
+      <HashRouter>
+        <AppRoutes />
+        <Toaster
+          position={isMobile() ? 'top-center' : 'top-right'}
+          toastOptions={{
+            style: { fontFamily: 'Sarabun, sans-serif', fontSize: '14px' },
+            success: { duration: 3000 },
+            error: { duration: 5000 },
+          }}
+          containerStyle={isMobile() ? { top: 16 } : { top: 16, right: 16 }}
+        />
+      </HashRouter>
+      </ThemeProvider>
+    </AuthProvider>
+  );
+}
