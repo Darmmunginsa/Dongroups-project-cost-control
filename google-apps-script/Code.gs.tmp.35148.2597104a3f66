@@ -382,8 +382,7 @@ function addDisbursement(data) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const row = headers.map(h => data[h] !== undefined ? data[h] : '');
   sheet.appendRow(row);
-  addLog(data._user, 'เพิ่ม', 'Disbursements', data['รายการที่เบิก'] || '',
-    'จำนวน: ' + (data['จำนวนเงิน'] || '-') + ' | ประเภท: ' + (data['ประเภท'] || '-') + ' | สถานะ: ' + (data['สถานะ'] || '-') + ' | คนเบิก: ' + (data['คนเบิก'] || '-'));
+  addLog(data._user, 'เพิ่ม', 'Disbursements', data['รายการที่เบิก'] || '');
   return { success: true };
 }
 
@@ -395,8 +394,7 @@ function updateDisbursement(data) {
   if (!item) return { success: false, error: 'Disbursement not found' };
   const row = headers.map(h => data[h] !== undefined ? data[h] : item[h] || '');
   sheet.getRange(item._rowIndex, 1, 1, headers.length).setValues([row]);
-  addLog(data._user, 'แก้ไข', 'Disbursements', data['รายการที่เบิก'] || '',
-    'จำนวน: ' + (data['จำนวนเงิน'] || '-') + ' | ประเภท: ' + (data['ประเภท'] || '-') + ' | สถานะ: ' + (data['สถานะ'] || '-') + ' | คนเบิก: ' + (data['คนเบิก'] || '-'));
+  addLog(data._user, 'แก้ไข', 'Disbursements', data['รายการที่เบิก'] || '');
   return { success: true };
 }
 
@@ -406,8 +404,7 @@ function deleteDisbursement(rowIndex, user) {
   const item = items.find(i => i._rowIndex === parseInt(rowIndex));
   const name = item ? (item['รายการที่เบิก'] || 'rowIndex:' + rowIndex) : 'rowIndex:' + rowIndex;
   sheet.deleteRow(parseInt(rowIndex));
-  addLog(user, 'ลบ', 'Disbursements', name,
-    item ? ('จำนวน: ' + (item['จำนวนเงิน'] || '-') + ' | ประเภท: ' + (item['ประเภท'] || '-') + ' | คนเบิก: ' + (item['คนเบิก'] || '-')) : '');
+  addLog(user, 'ลบ', 'Disbursements', name);
   return { success: true };
 }
 
@@ -742,8 +739,7 @@ function addCapital(data) {
     return data[h] !== undefined ? data[h] : '';
   });
   sheet.appendRow(row);
-  addLog(data._user, 'เพิ่ม', 'Capital', data['Contributor'],
-    'จำนวน: ' + (data['Amount'] || '-') + ' | หมายเหตุ: ' + (data['Note'] || '-'));
+  addLog(data._user, 'เพิ่ม', 'Capital', data['Contributor'] + ' ' + data['Amount']);
   return { success: true, id };
 }
 
@@ -757,8 +753,7 @@ function updateCapital(data) {
     return data[h] !== undefined ? data[h] : (item[h] || '');
   });
   sheet.getRange(item._rowIndex, 1, 1, headers.length).setValues([row]);
-  addLog(data._user, 'แก้ไข', 'Capital', data['Contributor'],
-    'จำนวน: ' + (data['Amount'] || '-') + ' | หมายเหตุ: ' + (data['Note'] || '-'));
+  addLog(data._user, 'แก้ไข', 'Capital', data['Contributor'] + ' ' + data['Amount']);
   return { success: true };
 }
 

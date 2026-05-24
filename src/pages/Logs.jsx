@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getLogs } from '../api';
 import toast from 'react-hot-toast';
 
-const MODULE_OPT = ['Projects', 'Costs', 'Documents', 'Disbursements', 'Partners', 'Users'];
+const MODULE_OPT = ['Projects', 'Costs', 'Documents', 'Disbursements', 'Partners', 'Users', 'Capital'];
 const ACTION_OPT = ['เพิ่ม', 'แก้ไข', 'ลบ'];
 
 const ACTION_STYLE = {
@@ -12,20 +12,67 @@ const ACTION_STYLE = {
 };
 
 const MODULE_LABEL = {
-  Projects:     '📁 Projects',
-  Costs:        '💸 ต้นทุน',
-  Documents:    '📄 เอกสาร',
-  Disbursements:'💳 เบิกจ่าย',
-  Partners:     '👥 หุ้นส่วน',
-  Users:        '👤 ผู้ใช้',
+  Projects:      '📁 Projects',
+  Costs:         '💸 ต้นทุน',
+  Documents:     '📄 เอกสาร',
+  Disbursements: '💳 เบิกจ่าย',
+  Partners:      '👥 หุ้นส่วน',
+  Users:         '👤 ผู้ใช้',
+  Capital:       '💰 เงินทุน',
 };
 
+const MODULE_COLOR = {
+  Projects:      'bg-blue-50 text-blue-700',
+  Costs:         'bg-orange-50 text-orange-700',
+  Documents:     'bg-gray-100 text-gray-600',
+  Disbursements: 'bg-purple-50 text-purple-700',
+  Partners:      'bg-pink-50 text-pink-700',
+  Users:         'bg-yellow-50 text-yellow-700',
+  Capital:       'bg-emerald-50 text-emerald-700',
+};
+
+function formatThaiTime(raw) {
+  if (!raw) return '-';
+  const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  try {
+    const d = new Date(raw.replace(' ', 'T'));
+    if (isNaN(d)) return raw;
+    const day = d.getDate();
+    const mon = MONTHS[d.getMonth()];
+    const yr  = (d.getFullYear() + 543) % 100;
+    const hh  = String(d.getHours()).padStart(2, '0');
+    const mm  = String(d.getMinutes()).padStart(2, '0');
+    return `${day} ${mon} ${yr}  ${hh}:${mm}`;
+  } catch { return raw; }
+}
+
+function DetailChips({ detail }) {
+  if (!detail) return null;
+  const parts = detail.split('|').map(s => s.trim()).filter(Boolean);
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {parts.map((p, i) => {
+        const colonIdx = p.indexOf(':');
+        const key = colonIdx >= 0 ? p.slice(0, colonIdx).trim() : p;
+        const val = colonIdx >= 0 ? p.slice(colonIdx + 1).trim() : '';
+        return (
+          <span key={i} className="inline-flex items-center gap-1 bg-white border border-gray-200 text-xs px-2 py-0.5 rounded-full">
+            <span className="text-gray-400">{key}</span>
+            <span className="font-semibold text-gray-700">{val || '-'}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Logs() {
-  const [items, setItems]         = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState('');
+  const [items, setItems]               = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [search, setSearch]             = useState('');
   const [filterModule, setFilterModule] = useState('all');
   const [filterAction, setFilterAction] = useState('all');
+  const [expanded, setExpanded]         = useState(null);
 
   useEffect(() => { load(); }, []);
 
@@ -51,14 +98,14 @@ export default function Logs() {
     return matchSearch && matchModule && matchAction;
   });
 
-  // สรุปยอด
   const countAdd    = items.filter(i => i.Action === 'เพิ่ม').length;
   const countEdit   = items.filter(i => i.Action === 'แก้ไข').length;
   const countDelete = items.filter(i => i.Action === 'ลบ').length;
 
+  const toggleExpand = (idx) => setExpanded(expanded === idx ? null : idx);
+
   return (
     <div className="p-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold text-gray-900">ประวัติการทำรายการ</h1>
@@ -72,7 +119,6 @@ export default function Logs() {
         </button>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4 mb-5">
         <div className="card p-4 text-center">
           <p className="text-xs text-gray-400 mb-1">เพิ่มรายการ</p>
@@ -88,11 +134,10 @@ export default function Logs() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <input
           type="text"
-          placeholder="ค้นหา ผู้ใช้, รายการ..."
+          placeholder="ค้นหา ผู้ใช้, รายการ, รายละเอียด..."
           className="input-field sm:max-w-xs"
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -120,41 +165,70 @@ export default function Logs() {
             <table className="w-full text-sm min-w-[600px]">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">เวลา</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">ผู้ทำรายการ</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500">การกระทำ</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">หมวด</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-36">เวลา</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-32">ผู้ทำรายการ</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 w-20">การกระทำ</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-28">หมวด</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">รายการ</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">รายละเอียด</th>
+                  <th className="px-4 py-3 w-8"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs">{item.Timestamp}</td>
-                    <td className="px-4 py-3 font-medium text-gray-700">{item.User || '-'}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ACTION_STYLE[item.Action] || 'bg-gray-100 text-gray-600'}`}>
-                        {item.Action}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                      {MODULE_LABEL[item.Module] || item.Module}
-                    </td>
-                    <td className="px-4 py-3 text-gray-800">{item.ItemName || '-'}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{item.Detail || '-'}</td>
-                  </tr>
-                ))}
+              <tbody>
+                {filtered.map((item, idx) => {
+                  const hasDetail = item.Detail && item.Detail !== '-' && item.Detail.trim() !== '';
+                  const isOpen = expanded === idx;
+                  return (
+                    <tbody key={idx}>
+                      <tr
+                        className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${hasDetail ? 'cursor-pointer' : ''} ${isOpen ? 'bg-blue-50/30' : ''}`}
+                        onClick={() => hasDetail && toggleExpand(idx)}
+                      >
+                        <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs">{formatThaiTime(item.Timestamp)}</td>
+                        <td className="px-4 py-3 font-medium text-gray-700">{item.User || '-'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ACTION_STYLE[item.Action] || 'bg-gray-100 text-gray-600'}`}>
+                            {item.Action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${MODULE_COLOR[item.Module] || 'bg-gray-100 text-gray-600'}`}>
+                            {MODULE_LABEL[item.Module] || item.Module}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-800 font-medium">{item.ItemName || '-'}</td>
+                        <td className="px-4 py-3 text-center text-gray-300">
+                          {hasDetail && (
+                            <span className={`text-xs transition-transform inline-block ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                          )}
+                        </td>
+                      </tr>
+                      {isOpen && hasDetail && (
+                        <tr className="bg-blue-50/20 border-b border-blue-100">
+                          <td colSpan={6} className="px-6 py-3">
+                            <p className="text-xs text-blue-400 font-semibold uppercase tracking-wide mb-1.5">รายละเอียด</p>
+                            <DetailChips detail={item.Detail} />
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  );
+                })}
               </tbody>
             </table>
           </div>
           {filtered.length === 0 && (
             <div className="text-center py-12 text-gray-400">
               <p className="text-3xl mb-2">📋</p>
-              <p>ยังไม่มีประวัติการทำรายการ</p>
+              <p>ไม่พบรายการ</p>
             </div>
           )}
         </div>
+      )}
+
+      {filtered.length > 0 && (
+        <p className="text-xs text-gray-400 mt-3 text-center">
+          แสดง {filtered.length} จาก {items.length} รายการ • คลิกที่แถวเพื่อดูรายละเอียด
+        </p>
       )}
     </div>
   );

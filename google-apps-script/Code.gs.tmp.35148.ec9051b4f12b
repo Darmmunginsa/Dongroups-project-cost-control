@@ -742,8 +742,7 @@ function addCapital(data) {
     return data[h] !== undefined ? data[h] : '';
   });
   sheet.appendRow(row);
-  addLog(data._user, 'เพิ่ม', 'Capital', data['Contributor'],
-    'จำนวน: ' + (data['Amount'] || '-') + ' | หมายเหตุ: ' + (data['Note'] || '-'));
+  addLog(data._user, 'เพิ่ม', 'Capital', data['Contributor'] + ' ' + data['Amount']);
   return { success: true, id };
 }
 
@@ -757,8 +756,7 @@ function updateCapital(data) {
     return data[h] !== undefined ? data[h] : (item[h] || '');
   });
   sheet.getRange(item._rowIndex, 1, 1, headers.length).setValues([row]);
-  addLog(data._user, 'แก้ไข', 'Capital', data['Contributor'],
-    'จำนวน: ' + (data['Amount'] || '-') + ' | หมายเหตุ: ' + (data['Note'] || '-'));
+  addLog(data._user, 'แก้ไข', 'Capital', data['Contributor'] + ' ' + data['Amount']);
   return { success: true };
 }
 
