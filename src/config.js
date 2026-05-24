@@ -2,4 +2,4 @@
 //  แก้ไข APPS_SCRIPT_URL ให้ตรงกับ Web App URL ที่ Deploy จาก
 //  Google Apps Script ของคุณ
 // ============================================================
-export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwEpBGpXmUc9BOF17C0qkHEQZbiJymgg4RVglc4XPqLQqy82i9CRC8YJcL-8lK_WY4/exec';
+export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyzMw_KtkL-y3K9HGC4Hm6pD-RsUwN-Z9OvbSiyN0RTpJ9QJGFAKlcj2ZXYrKxIIZArPw/exec';
