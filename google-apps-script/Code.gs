@@ -1,0 +1,689 @@
+// ============================================================
+//  Project Cost Control - Google Apps Script Backend
+//  วางไฟล์นี้ใน Google Apps Script แล้ว Deploy เป็น Web App
+// ============================================================
+
+// ===== CONFIG: แก้ไขค่าเหล่านี้ให้ตรงกับ Google Sheets ของคุณ =====
+const SPREADSHEET_ID = '1PX8H1yv25yy1WyIkSPNVqycM7YqDxXDdrwAA_nN4XnI'; // ID ของ Google Sheets
+const DRIVE_FOLDER_ID = 'REPLACE_WITH_YOUR_DRIVE_FOLDER_ID'; // ID ของ Google Drive folder สำหรับเก็บไฟล์
+
+// Sheet names
+const SHEET_PROJECTS = 'Projects';
+const SHEET_COSTS = 'ProjectCost';
+const SHEET_DOCUMENTS = 'ProjectDocument';
+const SHEET_DISBURSEMENTS = 'รายการเบิก';
+const SHEET_USERS = 'Users';
+const SHEET_PARTNERS = 'Partners';
+
+// ===== CORS & ROUTING =====
+function doGet(e) {
+  return handleRequest(e);
+}
+
+function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
+  const output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
+
+  try {
+    const params = e.parameter || {};
+    const postData = e.postData ? JSON.parse(e.postData.contents) : {};
+    const data = Object.assign({}, params, postData);
+
+    const action = data.action;
+    const token = data.token;
+
+    // Public actions (no auth required)
+    if (action === 'login') {
+      output.setContent(JSON.stringify(handleLogin(data)));
+      return addCorsHeaders(output);
+    }
+
+    // Auth check
+    if (!validateToken(token)) {
+      output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
+      return addCorsHeaders(output);
+    }
+
+    // Protected actions
+    let result;
+    switch (action) {
+      // Projects
+      case 'getProjects':       result = getProjects(); break;
+      case 'getProject':        result = getProject(data.id); break;
+      case 'addProject':        result = addProject(data); break;
+      case 'updateProject':     result = updateProject(data); break;
+      case 'deleteProject':     result = deleteProject(data.id, data._user); break;
+
+      // Project Costs
+      case 'getCosts':          result = getCosts(data.projectId); break;
+      case 'addCost':           result = addCost(data); break;
+      case 'updateCost':        result = updateCost(data); break;
+      case 'deleteCost':        result = deleteCost(data.id, data._user); break;
+
+      // Project Documents
+      case 'getDocuments':      result = getDocuments(data.projectId); break;
+      case 'addDocument':       result = addDocument(data); break;
+      case 'updateDocument':    result = updateDocument(data); break;
+      case 'deleteDocument':    result = deleteDocument(data.id, data._user); break;
+
+      // Disbursements
+      case 'getDisbursements':  result = getDisbursements(); break;
+      case 'addDisbursement':   result = addDisbursement(data); break;
+      case 'updateDisbursement':result = updateDisbursement(data); break;
+      case 'deleteDisbursement':result = deleteDisbursement(data.rowIndex, data._user); break;
+
+      // Summary
+      case 'getSummary':        result = getSummary(); break;
+
+      // Partners
+      case 'getPartners':       result = getPartners(); break;
+      case 'addPartner':        result = addPartner(data); break;
+      case 'updatePartner':     result = updatePartner(data); break;
+      case 'deletePartner':     result = deletePartner(data.id, data._user); break;
+
+      // File Upload
+      case 'uploadFile':        result = uploadFile(data); break;
+
+      // Users
+      case 'getUsers':          result = getUsers(); break;
+      case 'addUser':           result = addUser(data); break;
+      case 'updateUser':        result = updateUser(data); break;
+      case 'deleteUser':        result = deleteUser(data.id, data._user); break;
+
+      // Logs
+      case 'getLogs':           result = getLogs(); break;
+
+      default:
+        result = { success: false, error: 'Unknown action: ' + action };
+    }
+
+    output.setContent(JSON.stringify(result));
+  } catch (err) {
+    output.setContent(JSON.stringify({ success: false, error: err.toString() }));
+  }
+
+  return addCorsHeaders(output);
+}
+
+function addCorsHeaders(output) {
+  return output; // Apps Script handles CORS automatically when deployed as web app
+}
+
+// ===== AUTH =====
+function handleLogin(data) {
+  const { username, password } = data;
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_USERS);
+
+  // สร้าง Users sheet ถ้ายังไม่มี
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_USERS);
+    sheet.getRange(1, 1, 1, 5).setValues([['UserID', 'Username', 'Password', 'DisplayName', 'Role']]);
+    // สร้าง admin user เริ่มต้น
+    sheet.getRange(2, 1, 1, 5).setValues([[generateId(), 'admin', hashPassword('admin1234'), 'Administrator', 'admin']]);
+  }
+
+  const data2d = sheet.getDataRange().getValues();
+  const headers = data2d[0];
+  const rows = data2d.slice(1);
+
+  const usernameIdx = headers.indexOf('Username');
+  const passwordIdx = headers.indexOf('Password');
+  const displayNameIdx = headers.indexOf('DisplayName');
+  const roleIdx = headers.indexOf('Role');
+  const userIdIdx = headers.indexOf('UserID');
+
+  for (const row of rows) {
+    if (row[usernameIdx] === username && row[passwordIdx] === hashPassword(password)) {
+      const token = generateToken(row[userIdIdx]);
+      return {
+        success: true,
+        token,
+        user: {
+          id: row[userIdIdx],
+          username: row[usernameIdx],
+          displayName: row[displayNameIdx],
+          role: row[roleIdx]
+        }
+      };
+    }
+  }
+
+  return { success: false, error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+}
+
+function hashPassword(password) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password)
+    .map(b => ('0' + (b & 0xff).toString(16)).slice(-2))
+    .join('');
+}
+
+function generateToken(userId) {
+  const timestamp = new Date().getTime();
+  const raw = userId + ':' + timestamp + ':' + Math.random();
+  return Utilities.base64Encode(raw);
+}
+
+function validateToken(token) {
+  if (!token) return false;
+  try {
+    const decoded = Utilities.newBlob(Utilities.base64Decode(token)).getDataAsString();
+    const parts = decoded.split(':');
+    if (parts.length < 2) return false;
+    const timestamp = parseInt(parts[1]);
+    const now = new Date().getTime();
+    // Token valid for 24 hours
+    return (now - timestamp) < 24 * 60 * 60 * 1000;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ===== UTILITIES =====
+function generateId() {
+  return Utilities.getUuid().replace(/-/g, '').substring(0, 8);
+}
+
+function getSheet(name) {
+  return SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+}
+
+function sheetToObjects(sheet) {
+  if (!sheet) return [];
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  const headers = data[0];
+  return data.slice(1).map((row, index) => {
+    const obj = { _rowIndex: index + 2 }; // 1-based, +1 for header
+    headers.forEach((h, i) => {
+      let val = row[i];
+      if (val instanceof Date) val = val.toISOString().split('T')[0];
+      obj[h] = val === '' ? null : val;
+    });
+    return obj;
+  }).filter(obj => Object.values(obj).some(v => v !== null && v !== '' && v !== undefined));
+}
+
+// ===== PROJECTS =====
+function ensureProjectsColumns() {
+  const sheet = getSheet(SHEET_PROJECTS);
+  if (!sheet) return;
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf('PartnerShares') === -1) {
+    sheet.getRange(1, headers.length + 1).setValue('PartnerShares');
+  }
+}
+
+function getProjects() {
+  ensureProjectsColumns();
+  const sheet = getSheet(SHEET_PROJECTS);
+  const projects = sheetToObjects(sheet);
+  return { success: true, data: projects };
+}
+
+function getProject(id) {
+  const sheet = getSheet(SHEET_PROJECTS);
+  const projects = sheetToObjects(sheet);
+  const project = projects.find(p => p.ProjectID === id);
+  if (!project) return { success: false, error: 'Project not found' };
+  return { success: true, data: project };
+}
+
+function addProject(data) {
+  const sheet = getSheet(SHEET_PROJECTS);
+  const id = generateId();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(h => {
+    if (h === 'ProjectID') return id;
+    return data[h] !== undefined ? data[h] : '';
+  });
+  sheet.appendRow(row);
+  addLog(data._user, 'เพิ่ม', 'Projects', data['ProjectName'] || id);
+  return { success: true, id };
+}
+
+function updateProject(data) {
+  const sheet = getSheet(SHEET_PROJECTS);
+  const projects = sheetToObjects(sheet);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const project = projects.find(p => p.ProjectID === data.ProjectID);
+  if (!project) return { success: false, error: 'Project not found' };
+
+  const row = headers.map(h => data[h] !== undefined ? data[h] : project[h] || '');
+  sheet.getRange(project._rowIndex, 1, 1, headers.length).setValues([row]);
+  addLog(data._user, 'แก้ไข', 'Projects', data['ProjectName'] || data.ProjectID);
+  return { success: true };
+}
+
+function deleteProject(id, user) {
+  const sheet = getSheet(SHEET_PROJECTS);
+  const projects = sheetToObjects(sheet);
+  const project = projects.find(p => p.ProjectID === id);
+  if (!project) return { success: false, error: 'Project not found' };
+  const name = project['ProjectName'] || id;
+  sheet.deleteRow(project._rowIndex);
+  addLog(user, 'ลบ', 'Projects', name);
+  return { success: true };
+}
+
+// ===== PROJECT COSTS =====
+function getCosts(projectId) {
+  const sheet = getSheet(SHEET_COSTS);
+  const costs = sheetToObjects(sheet);
+  const filtered = projectId ? costs.filter(c => c.ProjectID === projectId) : costs;
+  return { success: true, data: filtered };
+}
+
+function addCost(data) {
+  const sheet = getSheet(SHEET_COSTS);
+  const id = generateId();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(h => {
+    if (h === 'CostID') return id;
+    return data[h] !== undefined ? data[h] : '';
+  });
+  sheet.appendRow(row);
+  addLog(data._user, 'เพิ่ม', 'Costs', data['CostName'] || id);
+  return { success: true, id };
+}
+
+function updateCost(data) {
+  const sheet = getSheet(SHEET_COSTS);
+  const costs = sheetToObjects(sheet);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const cost = costs.find(c => c.CostID === data.CostID);
+  if (!cost) return { success: false, error: 'Cost not found' };
+  const row = headers.map(h => data[h] !== undefined ? data[h] : cost[h] || '');
+  sheet.getRange(cost._rowIndex, 1, 1, headers.length).setValues([row]);
+  addLog(data._user, 'แก้ไข', 'Costs', data['CostName'] || data.CostID);
+  return { success: true };
+}
+
+function deleteCost(id, user) {
+  const sheet = getSheet(SHEET_COSTS);
+  const costs = sheetToObjects(sheet);
+  const cost = costs.find(c => c.CostID === id);
+  if (!cost) return { success: false, error: 'Cost not found' };
+  const name = cost['CostName'] || id;
+  sheet.deleteRow(cost._rowIndex);
+  addLog(user, 'ลบ', 'Costs', name);
+  return { success: true };
+}
+
+// ===== PROJECT DOCUMENTS =====
+function getDocuments(projectId) {
+  const sheet = getSheet(SHEET_DOCUMENTS);
+  const docs = sheetToObjects(sheet);
+  const filtered = projectId ? docs.filter(d => d.ProjectID === projectId) : docs;
+  return { success: true, data: filtered };
+}
+
+function addDocument(data) {
+  const sheet = getSheet(SHEET_DOCUMENTS);
+  const id = generateId();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(h => {
+    if (h === 'DocID') return id;
+    return data[h] !== undefined ? data[h] : '';
+  });
+  sheet.appendRow(row);
+  addLog(data._user, 'เพิ่ม', 'Documents', data['DocName'] || id);
+  return { success: true, id };
+}
+
+function updateDocument(data) {
+  const sheet = getSheet(SHEET_DOCUMENTS);
+  const docs = sheetToObjects(sheet);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const doc = docs.find(d => d.DocID === data.DocID);
+  if (!doc) return { success: false, error: 'Document not found' };
+  const row = headers.map(h => data[h] !== undefined ? data[h] : doc[h] || '');
+  sheet.getRange(doc._rowIndex, 1, 1, headers.length).setValues([row]);
+  addLog(data._user, 'แก้ไข', 'Documents', data['DocName'] || data.DocID);
+  return { success: true };
+}
+
+function deleteDocument(id, user) {
+  const sheet = getSheet(SHEET_DOCUMENTS);
+  const docs = sheetToObjects(sheet);
+  const doc = docs.find(d => d.DocID === id);
+  if (!doc) return { success: false, error: 'Document not found' };
+  const name = doc['DocName'] || id;
+  sheet.deleteRow(doc._rowIndex);
+  addLog(user, 'ลบ', 'Documents', name);
+  return { success: true };
+}
+
+// ===== DISBURSEMENTS =====
+function getDisbursements() {
+  const sheet = getSheet(SHEET_DISBURSEMENTS);
+  const items = sheetToObjects(sheet);
+  return { success: true, data: items };
+}
+
+function addDisbursement(data) {
+  const sheet = getSheet(SHEET_DISBURSEMENTS);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(h => data[h] !== undefined ? data[h] : '');
+  sheet.appendRow(row);
+  addLog(data._user, 'เพิ่ม', 'Disbursements', data['รายการที่เบิก'] || '');
+  return { success: true };
+}
+
+function updateDisbursement(data) {
+  const sheet = getSheet(SHEET_DISBURSEMENTS);
+  const items = sheetToObjects(sheet);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const item = items.find(i => i._rowIndex === parseInt(data.rowIndex));
+  if (!item) return { success: false, error: 'Disbursement not found' };
+  const row = headers.map(h => data[h] !== undefined ? data[h] : item[h] || '');
+  sheet.getRange(item._rowIndex, 1, 1, headers.length).setValues([row]);
+  addLog(data._user, 'แก้ไข', 'Disbursements', data['รายการที่เบิก'] || '');
+  return { success: true };
+}
+
+function deleteDisbursement(rowIndex, user) {
+  const sheet = getSheet(SHEET_DISBURSEMENTS);
+  const items = sheetToObjects(sheet);
+  const item = items.find(i => i._rowIndex === parseInt(rowIndex));
+  const name = item ? (item['รายการที่เบิก'] || 'rowIndex:' + rowIndex) : 'rowIndex:' + rowIndex;
+  sheet.deleteRow(parseInt(rowIndex));
+  addLog(user, 'ลบ', 'Disbursements', name);
+  return { success: true };
+}
+
+// ===== SUMMARY =====
+function getSummary() {
+  const projects = sheetToObjects(getSheet(SHEET_PROJECTS));
+  const costs = sheetToObjects(getSheet(SHEET_COSTS));
+  const disbursements = sheetToObjects(getSheet(SHEET_DISBURSEMENTS));
+  const partners = getPartnersData();
+
+  const done = projects.filter(p => p.Status === 'Done');
+  const onProcess = projects.filter(p => p.Status === 'On Process');
+
+  // นับเฉพาะ Project ที่ลูกค้าจ่ายแล้ว (Paid) เป็นรายได้จริง
+  const paidProjects = projects.filter(p => p.PaymentStatus === 'Paid');
+  const totalRevenue = paidProjects.reduce((sum, p) => sum + (parseFloat(p.NetPrice) || 0), 0);
+  const totalCost = costs.reduce((sum, c) => sum + (parseFloat(c.Amount) || 0), 0);
+  const totalProfit = totalRevenue - totalCost;
+
+  const pendingProjects = projects.filter(p => p.PaymentStatus === 'Pending');
+  const pendingPayment = pendingProjects.length;
+  const pendingRevenue = pendingProjects.reduce((sum, p) => sum + (parseFloat(p.NetPrice) || 0), 0);
+  const totalDisbursed = disbursements.reduce((sum, d) => sum + (parseFloat(d['จำนวนเงิน']) || 0), 0);
+  const pendingDisbursements = disbursements.filter(d => d['สถานะ'] !== 'จ่ายแล้ว').length;
+
+  // เงินกองกลาง = กำไร (เฉพาะ Paid projects) − ยอดที่จ่ายออกจริงแล้ว
+  const totalActuallyPaid = disbursements
+    .filter(d => d['สถานะ'] === 'จ่ายแล้ว')
+    .reduce(function(sum, d) { return sum + (parseFloat(d['จำนวนเงิน']) || 0); }, 0);
+  const เงินกองกลาง = totalProfit - totalActuallyPaid;
+
+  // คำนวณส่วนแบ่งกำไรแบบ per-project จาก PartnerShares JSON
+  // นับเฉพาะ Project ที่ลูกค้าจ่ายแล้ว (Paid) เท่านั้น
+  const partnerShareMap = {};
+  partners.forEach(p => { partnerShareMap[p.PartnerID] = 0; });
+
+  paidProjects.forEach(function(project) {
+    var projectCosts = costs.filter(function(c) { return c.ProjectID === project.ProjectID; });
+    var projectCostTotal = projectCosts.reduce(function(sum, c) { return sum + (parseFloat(c.Amount) || 0); }, 0);
+    var projectProfit = (parseFloat(project.NetPrice) || 0) - projectCostTotal;
+
+    // อ่าน PartnerShares JSON เช่น {"ดาม":40,"กฤต":60}
+    var shares = {};
+    try {
+      if (project.PartnerShares) shares = JSON.parse(project.PartnerShares);
+    } catch(e) {}
+
+    partners.forEach(function(p) {
+      var pct = parseFloat(shares[p.Name]) || 0;
+      partnerShareMap[p.PartnerID] += projectProfit * pct / 100;
+    });
+  });
+
+  const profitSharing = partners.map(function(p) {
+    var share = partnerShareMap[p.PartnerID] || 0;
+    var disbursed = disbursements
+      .filter(function(d) {
+        var nameMatch = d['คนเบิก'] && d['คนเบิก'].toString().trim() === (p.DisbursementName || '').trim();
+        var typeMatch = !p.DisbursementType || p.DisbursementType === '' || d['ประเภท'] === p.DisbursementType;
+        var statusMatch = !p.DisbursementStatus || p.DisbursementStatus === '' || d['สถานะ'] === p.DisbursementStatus;
+        return nameMatch && typeMatch && statusMatch;
+      })
+      .reduce(function(sum, d) { return sum + (parseFloat(d['จำนวนเงิน']) || 0); }, 0);
+    return {
+      id: p.PartnerID,
+      name: p.Name,
+      share: share,
+      disbursed: disbursed,
+      remaining: share - disbursed
+    };
+  });
+
+  return {
+    success: true,
+    data: {
+      งานคงค้าง: onProcess.length,
+      งานที่ทำเสร็จแล้ว: done.length,
+      รายได้สุทธิ: totalRevenue,
+      ต้นทุนรวม: totalCost,
+      กำไร: totalProfit,
+      เงินกองกลาง: เงินกองกลาง,
+      รอพิจรณาเพื่อจ่าย: pendingPayment,
+      รายได้รอรับ: pendingRevenue,
+      อื่นๆที่รอจ่าย: pendingDisbursements,
+      สรุปเบิกจ่ายตาม: totalDisbursed,
+      profitSharing: profitSharing
+    }
+  };
+}
+
+// ===== PARTNERS =====
+function getPartnersData() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_PARTNERS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_PARTNERS);
+    sheet.getRange(1, 1, 1, 4).setValues([['PartnerID', 'Name', 'DisbursementName', 'DisbursementType']]);
+  } else {
+    // migrate: add missing columns
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headers.indexOf('DisbursementType') === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('DisbursementType');
+    }
+    const headers2 = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headers2.indexOf('DisbursementStatus') === -1) {
+      sheet.getRange(1, headers2.length + 1).setValue('DisbursementStatus');
+    }
+  }
+  return sheetToObjects(sheet);
+}
+
+function getPartners() {
+  return { success: true, data: getPartnersData() };
+}
+
+function addPartner(data) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_PARTNERS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_PARTNERS);
+    sheet.getRange(1, 1, 1, 4).setValues([['PartnerID', 'Name', 'DisbursementName', 'DisbursementType']]);
+  }
+  const id = generateId();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(function(h) {
+    if (h === 'PartnerID') return id;
+    return data[h] !== undefined ? data[h] : '';
+  });
+  sheet.appendRow(row);
+  addLog(data._user, 'เพิ่ม', 'Partners', data['Name'] || id);
+  return { success: true, id };
+}
+
+function updatePartner(data) {
+  const sheet = getSheet(SHEET_PARTNERS);
+  if (!sheet) return { success: false, error: 'Partners sheet not found' };
+  const partners = sheetToObjects(sheet);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const partner = partners.find(p => p.PartnerID === data.PartnerID);
+  if (!partner) return { success: false, error: 'Partner not found' };
+  const row = headers.map(function(h) {
+    if (h === 'PartnerID') return partner.PartnerID;
+    return data[h] !== undefined ? data[h] : (partner[h] || '');
+  });
+  sheet.getRange(partner._rowIndex, 1, 1, headers.length).setValues([row]);
+  addLog(data._user, 'แก้ไข', 'Partners', data['Name'] || data.PartnerID);
+  return { success: true };
+}
+
+function deletePartner(id, user) {
+  const sheet = getSheet(SHEET_PARTNERS);
+  if (!sheet) return { success: false, error: 'Partners sheet not found' };
+  const partners = sheetToObjects(sheet);
+  const partner = partners.find(p => p.PartnerID === id);
+  if (!partner) return { success: false, error: 'Partner not found' };
+  const name = partner['Name'] || id;
+  sheet.deleteRow(partner._rowIndex);
+  addLog(user, 'ลบ', 'Partners', name);
+  return { success: true };
+}
+
+// ===== FILE UPLOAD =====
+function uploadFile(data) {
+  try {
+    const { fileName, fileData, mimeType, subfolder } = data;
+    const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+
+    let targetFolder = folder;
+    if (subfolder) {
+      const existing = folder.getFoldersByName(subfolder);
+      targetFolder = existing.hasNext() ? existing.next() : folder.createFolder(subfolder);
+    }
+
+    const decoded = Utilities.base64Decode(fileData);
+    const blob = Utilities.newBlob(decoded, mimeType, fileName);
+    const file = targetFolder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    return {
+      success: true,
+      fileId: file.getId(),
+      fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view',
+      fileName: fileName
+    };
+  } catch (err) {
+    return { success: false, error: err.toString() };
+  }
+}
+
+// ===== USERS =====
+function getUsers() {
+  const sheet = getSheet(SHEET_USERS);
+  if (!sheet) return { success: true, data: [] };
+  const users = sheetToObjects(sheet);
+  // Don't return passwords
+  return { success: true, data: users.map(u => ({ ...u, Password: undefined })) };
+}
+
+function addUser(data) {
+  const sheet = getSheet(SHEET_USERS);
+  if (!sheet) return { success: false, error: 'Users sheet not found' };
+  const id = generateId();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(h => {
+    if (h === 'UserID') return id;
+    if (h === 'Password') return hashPassword(data.Password || 'changeme123');
+    return data[h] !== undefined ? data[h] : '';
+  });
+  sheet.appendRow(row);
+  addLog(data._user, 'เพิ่ม', 'Users', data['Username'] || id);
+  return { success: true, id };
+}
+
+function updateUser(data) {
+  const sheet = getSheet(SHEET_USERS);
+  const users = sheetToObjects(sheet);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const user = users.find(u => u.UserID === data.UserID);
+  if (!user) return { success: false, error: 'User not found' };
+
+  // ถ้ามี OldPassword ให้ตรวจสอบก่อนเปลี่ยน
+  if (data.OldPassword) {
+    if (user.Password !== hashPassword(data.OldPassword)) {
+      return { success: false, error: 'รหัสผ่านเดิมไม่ถูกต้อง' };
+    }
+  }
+
+  const row = headers.map(h => {
+    if (h === 'Password' && data.Password) return hashPassword(data.Password);
+    if (h === 'Password') return user.Password;
+    if (h === 'DisplayName' && data.DisplayName) return data.DisplayName;
+    return data[h] !== undefined ? data[h] : user[h] || '';
+  });
+  sheet.getRange(user._rowIndex, 1, 1, headers.length).setValues([row]);
+  const detail = data.Password ? 'เปลี่ยนรหัสผ่าน' : (data.DisplayName ? 'เปลี่ยนชื่อ' : 'แก้ไขข้อมูล');
+  addLog(data._user, 'แก้ไข', 'Users', user['Username'] || data.UserID, detail);
+  return { success: true };
+}
+
+function deleteUser(id, user) {
+  const sheet = getSheet(SHEET_USERS);
+  if (!sheet) return { success: false, error: 'Users sheet not found' };
+  const users = sheetToObjects(sheet);
+  const target = users.find(u => u.UserID === id);
+  if (!target) return { success: false, error: 'User not found' };
+  const name = target['Username'] || id;
+  sheet.deleteRow(target._rowIndex);
+  addLog(user, 'ลบ', 'Users', name);
+  return { success: true };
+}
+// ===== TRANSACTION LOGS =====
+const SHEET_LOGS = 'Logs';
+
+function ensureLogsSheet() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_LOGS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_LOGS);
+    sheet.getRange(1, 1, 1, 6).setValues([['Timestamp', 'User', 'Action', 'Module', 'ItemName', 'Detail']]);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, 6).setFontWeight('bold').setBackground('#f3f4f6');
+    sheet.setColumnWidth(1, 160);
+    sheet.setColumnWidth(2, 100);
+    sheet.setColumnWidth(3, 80);
+    sheet.setColumnWidth(4, 120);
+    sheet.setColumnWidth(5, 200);
+    sheet.setColumnWidth(6, 200);
+  }
+  return sheet;
+}
+
+function addLog(user, action, module, itemName, detail) {
+  try {
+    const sheet = ensureLogsSheet();
+    const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    sheet.appendRow([timestamp, user || 'system', action, module, itemName || '', detail || '']);
+  } catch(e) {
+    // ไม่ให้ log error หยุด main operation
+  }
+}
+
+function getLogs() {
+  const sheet = ensureLogsSheet();
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { success: true, data: [] };
+  const headers = data[0];
+  const rows = data.slice(1).reverse(); // newest first
+  const logs = rows.map(function(row) {
+    var obj = {};
+    headers.forEach(function(h, i) { obj[h] = row[i] || ''; });
+    return obj;
+  });
+  return { success: true, data: logs };
+}

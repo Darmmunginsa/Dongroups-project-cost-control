@@ -1,0 +1,99 @@
+import { APPS_SCRIPT_URL } from '../config';
+
+function getToken() {
+  return localStorage.getItem('pcc_token');
+}
+
+function getCurrentUser() {
+  try {
+    const u = JSON.parse(localStorage.getItem('pcc_user') || '{}');
+    return u.displayName || u.username || '';
+  } catch { return ''; }
+}
+
+async function call(action, params = {}) {
+  const token = getToken();
+  const body = { action, token, _user: getCurrentUser(), ...params };
+
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // Apps Script requires text/plain for CORS
+    body: JSON.stringify(body),
+    redirect: 'follow',
+  });
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'เกิดข้อผิดพลาด');
+  return data;
+}
+
+// ===== AUTH =====
+export async function login(username, password) {
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'login', username, password }),
+    redirect: 'follow',
+  });
+  return res.json();
+}
+
+// ===== FILE UPLOAD =====
+export async function uploadFile(file, subfolder = 'uploads') {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const base64 = e.target.result.split(',')[1];
+        const result = await call('uploadFile', {
+          fileName: file.name,
+          fileData: base64,
+          mimeType: file.type,
+          subfolder,
+        });
+        resolve(result);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ===== PROJECTS =====
+export const getProjects = () => call('getProjects');
+export const getProject = (id) => call('getProject', { id });
+export const addProject = (data) => call('addProject', data);
+export const updateProject = (data) => call('updateProject', data);
+export const deleteProject = (id) => call('deleteProject', { id });
+
+// ===== COSTS =====
+export const getCosts = (projectId) => call('getCosts', { projectId });
+export const addCost = (data) => call('addCost', data);
+export const updateCost = (data) => call('updateCost', data);
+export const deleteCost = (id) => call('deleteCost', { id });
+
+// ===== DOCUMENTS =====
+export const getDocuments = (projectId) => call('getDocuments', { projectId });
+export const addDocument = (data) => call('addDocument', data);
+export const updateDocument = (data) => call('updateDocument', data);
+export const deleteDocument = (id) => call('deleteDocument', { id });
+
+// ===== DISBURSEMENTS =====
+export const getDisbursements = () => call('getDisbursements');
+export const addDisbursement = (data) => call('addDisbursement', data);
+export const updateDisbursement = (data) => call('updateDisbursement', data);
+export const deleteDisbursement = (rowIndex) => call('deleteDisbursement', { rowIndex });
+
+// ===== SUMMARY =====
+export const getSummary = () => call('getSummary');
+
+// ===== USERS =====
+export const getUsers = () => call('getUsers');
+export const addUser = (data) => call('addUser', data);
+export const updateUser = (data) => call('updateUser', data);
+export const deleteUser = (id) => call('deleteUser', { id });
+
+// ===== PARTNERS =====
+export const getPartners = () => call('getPartner

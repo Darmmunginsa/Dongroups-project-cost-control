@@ -1,0 +1,69 @@
+import { useState } from 'react';
+import { uploadFile } from '../api';
+import toast from 'react-hot-toast';
+
+export default function FileUpload({ label, value, onChange, subfolder = 'uploads', accept = '*', canDelete = true }) {
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('ไฟล์ขนาดใหญ่เกินไป (สูงสุด 10MB)');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const res = await uploadFile(file, subfolder);
+      onChange({ fileId: res.fileId, fileUrl: res.fileUrl, fileName: res.fileName });
+      toast.success('อัพโหลดสำเร็จ');
+    } catch (err) {
+      toast.error('อัพโหลดไม่สำเร็จ: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const fileName = value?.fileName || (value?.fileUrl ? 'ไฟล์ที่แนบ' : null);
+
+  return (
+    <div>
+      {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+      <div className="border-2 border-dashed border-gray-200 rounded-lg p-3 hover:border-blue-300 transition-colors">
+        {fileName ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-red-500">📄</span>
+              <a href={value?.fileUrl} target="_blank" rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:underline truncate max-w-[200px]">
+                {fileName}
+              </a>
+            </div>
+            {canDelete && (
+              <button type="button" onClick={() => onChange(null)} className="text-gray-400 hover:text-red-500">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        ) : (
+          <label className="flex flex-col items-center cursor-pointer py-2">
+            {uploading ? (
+              <div className="flex items-center gap-2 text-blue-600">
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                <span className="text-sm">กำลังอัพโหลด...</span>
+              </div>
+            ) : (
+              <>
+                <span className="text-2xl mb-1">📎</span>
+                <span className="text-xs text-gray-500">คลิกเพื่อแนบไฟล์</span>
+                <span className="text-xs text-gray-400">(PDF, รูปภาพ สูงสุด 10MB)</span>
+              </>
+            )}
+            <input type="file" className="hidden" accept={accept} onChange={handleFile} disabled={uplo
