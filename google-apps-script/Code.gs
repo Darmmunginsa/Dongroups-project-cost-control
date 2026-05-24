@@ -5,7 +5,7 @@
 
 // ===== CONFIG: แก้ไขค่าเหล่านี้ให้ตรงกับ Google Sheets ของคุณ =====
 const SPREADSHEET_ID = '1PX8H1yv25yy1WyIkSPNVqycM7YqDxXDdrwAA_nN4XnI'; // ID ของ Google Sheets
-const DRIVE_FOLDER_ID = 'REPLACE_WITH_YOUR_DRIVE_FOLDER_ID'; // ID ของ Google Drive folder สำหรับเก็บไฟล์
+const DRIVE_FOLDER_ID = '1VdpfZNw4phGMJvQx9Yx6h65Ikgen9EWn'; // ID ของ Google Drive folder สำหรับเก็บไฟล์
 
 // Sheet names
 const SHEET_PROJECTS = 'Projects';
