@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { getLogs } from '../api';
 import toast from 'react-hot-toast';
 
@@ -168,19 +168,19 @@ export default function Logs() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-36">เวลา</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-32">ผู้ทำรายการ</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 w-20">การกระทำ</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-28">หมวด</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-32">หมวด</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">รายการ</th>
                   <th className="px-4 py-3 w-8"></th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-50">
                 {filtered.map((item, idx) => {
                   const hasDetail = item.Detail && item.Detail !== '-' && item.Detail.trim() !== '';
                   const isOpen = expanded === idx;
                   return (
-                    <tbody key={idx}>
+                    <Fragment key={idx}>
                       <tr
-                        className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${hasDetail ? 'cursor-pointer' : ''} ${isOpen ? 'bg-blue-50/30' : ''}`}
+                        className={`hover:bg-gray-50 transition-colors ${hasDetail ? 'cursor-pointer' : ''} ${isOpen ? 'bg-blue-50/30' : ''}`}
                         onClick={() => hasDetail && toggleExpand(idx)}
                       >
                         <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs">{formatThaiTime(item.Timestamp)}</td>
@@ -198,19 +198,19 @@ export default function Logs() {
                         <td className="px-4 py-3 text-gray-800 font-medium">{item.ItemName || '-'}</td>
                         <td className="px-4 py-3 text-center text-gray-300">
                           {hasDetail && (
-                            <span className={`text-xs transition-transform inline-block ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                            <span className={`text-xs inline-block transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
                           )}
                         </td>
                       </tr>
                       {isOpen && hasDetail && (
-                        <tr className="bg-blue-50/20 border-b border-blue-100">
-                          <td colSpan={6} className="px-6 py-3">
+                        <tr className="bg-blue-50/20">
+                          <td colSpan={6} className="px-6 py-3 border-b border-blue-100">
                             <p className="text-xs text-blue-400 font-semibold uppercase tracking-wide mb-1.5">รายละเอียด</p>
                             <DetailChips detail={item.Detail} />
                           </td>
                         </tr>
                       )}
-                    </tbody>
+                    </Fragment>
                   );
                 })}
               </tbody>
