@@ -514,7 +514,6 @@ function getSummary() {
       ต้นทุนรวม: totalCost,
       กำไร: totalProfit,
       ยอดหักสะสม: totalDeduction,
-      ยอดหักคงเหลือ: totalDeduction - deductionUsed,
       เงินกองกลาง: เงินกองกลาง,
       รอพิจรณาเพื่อจ่าย: pendingPayment,
       เงินทุนรวม: เงินทุนรวม,
