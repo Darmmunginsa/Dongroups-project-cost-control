@@ -2,7 +2,18 @@ import { useState } from 'react';
 import { getAnnualReport } from '../api';
 import { formatCurrency } from '../utils/formatters';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
+
+// Load SheetJS from CDN on demand (avoids npm package issues)
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    script.onload = () => resolve(window.XLSX);
+    script.onerror = () => reject(new Error('โหลด SheetJS ไม่สำเร็จ'));
+    document.head.appendChild(script);
+  });
+}
 
 const THIS_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 5 }, (_, i) => THIS_YEAR - 2 + i);
@@ -33,6 +44,7 @@ export default function Report() {
     if (!report) return;
     setExporting(true);
     try {
+      const XLSX = await loadXLSX();
       const wb = XLSX.utils.book_new();
       const buddhistYear = year + 543;
 
