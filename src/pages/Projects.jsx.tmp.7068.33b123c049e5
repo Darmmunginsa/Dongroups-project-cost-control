@@ -196,16 +196,10 @@ export default function Projects() {
                               ? (() => {
                                   try {
                                     const obj = JSON.parse(p.PartnerShares);
-                                    const deduct = parseFloat(p.DeductionPct) || 0;
                                     return (
-                                      <div className="flex flex-col items-center gap-0.5">
-                                        {deduct > 0 && (
-                                          <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">หัก {deduct}%</span>
-                                        )}
-                                        <span className="text-xs text-gray-600">
-                                          {Object.entries(obj).map(([k,v]) => `${k} ${v}%`).join(' / ')}
-                                        </span>
-                                      </div>
+                                      <span className="text-xs text-gray-600">
+                                        {Object.entries(obj).map(([k,v]) => `${k} ${v}%`).join(' / ')}
+                                      </span>
                                     );
                                   } catch { return <span className="text-gray-300 text-xs">-</span>; }
                                 })()

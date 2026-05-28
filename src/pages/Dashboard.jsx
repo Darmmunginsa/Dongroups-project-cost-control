@@ -133,12 +133,28 @@ export default function Dashboard() {
               color="text-red-500"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
             <StatCard
               label="กำไร"
               value={formatCurrency(summary['กำไร'])}
               icon="📈"
               color={parseFloat(summary['กำไร']) >= 0 ? 'text-emerald-600' : 'text-red-600'}
+            />
+            <StatCard
+              label="ยอดหัก (ภาษี/สำรอง)"
+              value={formatCurrency(summary['ยอดหักสะสม'] || 0)}
+              icon="🏛️"
+              color="text-amber-600"
+              sub="หักก่อนแบ่งกำไร ตามที่กำหนดใน Project"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <StatCard
+              label="กำไรที่แบ่งได้"
+              value={formatCurrency((parseFloat(summary['กำไร']) || 0) - (parseFloat(summary['ยอดหักสะสม']) || 0))}
+              icon="💵"
+              color="text-emerald-700"
+              sub="กำไร − ยอดหัก"
             />
             <StatCard
               label="💼 เงินกองกลาง"

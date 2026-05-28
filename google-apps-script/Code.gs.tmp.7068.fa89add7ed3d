@@ -456,18 +456,11 @@ function getSummary() {
   // นับเฉพาะ Project ที่ลูกค้าจ่ายแล้ว (Paid) เท่านั้น
   const partnerShareMap = {};
   partners.forEach(p => { partnerShareMap[p.PartnerID] = 0; });
-  var totalDeduction = 0; // ยอดหักสะสม (ภาษี/กองทุนสำรอง)
 
   paidProjects.forEach(function(project) {
     var projectCosts = costs.filter(function(c) { return c.ProjectID === project.ProjectID; });
     var projectCostTotal = projectCosts.reduce(function(sum, c) { return sum + (parseFloat(c.Amount) || 0); }, 0);
     var projectProfit = (parseFloat(project.NetPrice) || 0) - projectCostTotal;
-
-    // หักก่อนแบ่ง (ภาษี / กองทุนสำรอง)
-    var deductionPct = parseFloat(project.DeductionPct) || 0;
-    var deductionAmt = projectProfit * deductionPct / 100;
-    var distributableProfit = projectProfit - deductionAmt;
-    totalDeduction += deductionAmt;
 
     // อ่าน PartnerShares JSON เช่น {"ดาม":40,"กฤต":60}
     var shares = {};
@@ -477,7 +470,7 @@ function getSummary() {
 
     partners.forEach(function(p) {
       var pct = parseFloat(shares[p.Name]) || 0;
-      partnerShareMap[p.PartnerID] += distributableProfit * pct / 100;
+      partnerShareMap[p.PartnerID] += projectProfit * pct / 100;
     });
   });
 
@@ -508,7 +501,6 @@ function getSummary() {
       รายได้สุทธิ: totalRevenue,
       ต้นทุนรวม: totalCost,
       กำไร: totalProfit,
-      ยอดหักสะสม: totalDeduction,
       เงินกองกลาง: เงินกองกลาง,
       รอพิจรณาเพื่อจ่าย: pendingPayment,
       เงินทุนรวม: เงินทุนรวม,
