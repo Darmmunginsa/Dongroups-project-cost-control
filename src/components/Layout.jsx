@@ -16,7 +16,7 @@ export default function Layout({ children }) {
   const isAdmin = user?.role === 'admin';
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navItems = isAdmin
-    ? [...baseNavItems, { path: '/logs', label: 'ประวัติ', icon: '📋' }, { path: '/settings', label: 'ตั้งค่า', icon: '⚙️' }]
+    ? [...baseNavItems, { path: '/report', label: 'รายงาน', icon: '📈' }, { path: '/logs', label: 'ประวัติ', icon: '📋' }, { path: '/settings', label: 'ตั้งค่า', icon: '⚙️' }]
     : baseNavItems;
   const location = useLocation();
   const navigate = useNavigate();
